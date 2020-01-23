@@ -8,6 +8,8 @@
 % Some rudimentary checks are included. Nevertheless be careful with the
 % primes, dimensions, and settings that you choose.
 %
+% The function returns the results as (N x dimensions x draws)-arrays.
+%
 % [H, S] = halton(N, dimensions, draws, PROP, VAL, ...)
 %
 % Returns:
@@ -35,8 +37,6 @@
 % 'scramble' - Set to 1 if you want a scrambled Halton set. Recommended for
 % high-dimensional sets. (For details see
 % http://mathworks.com/help/stats/qrandset.scramble.html)
-%
-% The function returns the results as (N x dimensions x draws)-arrays.
 %
 % References:
 % -----------
