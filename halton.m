@@ -1,135 +1,158 @@
-%% If you find mistakes / have comments: ebeusch@gmail.com
-% -------------------------------------------------------------------------
-% HALTON SEQUENCE(S) for MULTIDIMENSIONAL SIMULATED MLE
-% version 1.0, August 29 2015 (written in Matlab R2014a)
+function [H,Z] = halton(N,dimensions,draws,varargin)
+%HALTON Generate Halton sequences and transform to standard normal.
+% Version 2.0, Updated August 2025
+% Compatible with MATLAB R2014a and later
 %
-% This function computes Halton sequences (using the given primes as base).
-% The code follows Train (2003, Chapter 9.3.3-9.3.5).
-% Some rudimentary checks are included. Nevertheless be careful with the
-% primes, dimensions, and settings that you choose.
+% Original Author: Elisabeth Beusch
+% Modified by: Tunga Kantarci, August 2025
 %
-% The function returns the results as (N x dimensions x draws)-arrays.
+% Description of Modifications:
+%   - Adjusted comments and code to prevent edge cases and input 
+%     conflicts that could cause runtime errors or misbehavior.
 %
-% [H, S] = halton(N, dimensions, draws, PROP, VAL, ...)
+% This function computes Halton sequences using the specified prime 
+% bases and transforms them into standard normal draws. The 
+% implementation follows chapters 9.3.3-9.3.5 in Train (2003) and 
+% includes options for randomization and scrambling with respect to 
+% Bhat (2003).
 %
-% Returns:
-% --------
-% H - Halton draws
-% S - corresponding values from a standard normal distribution
+% Syntax:
+%   [H, Z] = halton(N,dimensions,draws)
+%   [H, Z] = halton(N,dimensions,draws,'Name',Value, ...)
 %
-% Required inputs:
-% ----------------
-% N - number of observational units for which Halton draws are needed
-% dimensions - dimensions of the integral
-% draws - number of draws
+% Inputs:
+%   N           - Number of observational units.
+%   dimensions  - Number of dimensions of the integral.
+%   draws       - Number of draws per observational unit.
 %
-% Optional inputs:
-% ----------------
-% 'prnum' - vector of primes, default are primes in ascending order.
-% 'burn' - specify the number of points at the beginning of the sequence to
-%          be dropped/burnt. Default are 50 (the first point, zero, will
-%          always be dropped).
-% 'leap' - specify the points to miss out between returned points.
-%          Default is no leap.
-% 'random' - Set to 1 if you want randomized Halton draws a la Bhat (2003).
-%            It is recommended to set a SEED before running halton.m with
-%            the 'random' option.
-% 'scramble' - Set to 1 if you want a scrambled Halton set. Recommended for
-% high-dimensional sets. (For details see
-% http://mathworks.com/help/stats/qrandset.scramble.html)
+% Name-Value Pair Arguments:
+%   'prime'     - Vector of prime numbers used as bases.
+%                 Default: 0 (uses first 'dimensions' primes).
+%   'burn'      - Number of initial Halton points to skip.
+%                 Default: 50.
+%   'leap'      - Number of points to skip between draws.
+%                 Default: 0.
+%   'random'    - Logical flag to apply randomization with respect to 
+%                 Bhat (2003).
+%                 Set to 1 to enable. Default: 0.
+%   'scramble'  - Logical flag to scramble the Halton sequence.
+%                 Recommended for high-dimensional settings.
+%                 Set to 1 to enable. Default: 0.
+%
+% Outputs:
+%   H - Halton draws of size (N x dimensions x draws).
+%   Z - Corresponding values from a standard normal distribution.
+%
+% Notes:
+%   - The first Halton point (zero) is always dropped.
+%   - The function performs basic checks on prime validity and
+%     dimensionality.
 %
 % References:
-% -----------
-% See http://www.jyu.fi/ersa2003/cdrom/papers/406.pdf on correlations of
-% Halton sequences for larger primes.
-% Train, K. 2003. Discrete Choice Methods with Simulation. Cambridge:
-%                 Cambridge University Press.
-
-function [H, S] = halton(N, dimensions, draws, varargin)
+%   Bhat, C. R., 2003. Simulation estimation of mixed discrete choice
+%   models using randomized and scrambled Halton sequences. 
+%   Transportation Research Part B: Methodological, 37 (9), 837-855.
+%
+%   Train, K., 2003. Discrete Choice Methods with Simulation. Cambridge
+%   University Press.
+%
+% ---------- BEGIN FUNCTION BODY BELOW ----------
 
 %% Optional input arguments
 opts = inputParser;
-    opt1 = 'prnum';
-    val1 = 0;
-        addParameter(opts,opt1,val1,@isnumeric);
-    opt2 = 'burn';
-    val2 = 50;
-        addParameter(opts,opt2,val2,@isnumeric);
-    opt3 = 'leap';
-    val3 = 0;
-        addParameter(opts,opt3,val3,@isnumeric);
-    opt4 = 'random';
-    val4 = 0;
-        addParameter(opts,opt4,val4,@isnumeric);
-    opt5 = 'scramble';
-    val5 = 0;
-        addParameter(opts,opt5,val5,@isnumeric);
+addParameter(opts,'prime',0,@isnumeric);
+addParameter(opts,'burn',50,@isnumeric);
+addParameter(opts,'leap',0,@isnumeric);
+addParameter(opts,'random',0,@isnumeric);
+addParameter(opts,'scramble',0,@isnumeric);
 parse(opts, varargin{:});
-    prnum = opts.Results.prnum;
-    burn = opts.Results.burn;
-    leap = opts.Results.leap;
-    randhalt = opts.Results.random;
-    toscramble = opts.Results.scramble;
 
-%% Defining the dimensions to be used
-if prnum == 0
-     p = dimensions;  
-else
-    if size(prnum,1) > size(prnum,2)
-        prnum = prnum';
-    end
-    %% some checks for dimensions and primes
-    if dimensions ~= size(prnum,2)
-        error('Dimensions do not match number of primes supplied')
-    end
-    if min(isprime(prnum)) == 0
-        error('Non-prime was supplied')
-    end
-    %% set dimensions for Matlab's haltonset fct based on max prime
-    p = size(primes(max(prnum)+1),2);
+prime      = opts.Results.prime;
+burn       = opts.Results.burn;
+leap       = opts.Results.leap;
+randhalt   = opts.Results.random;
+toscramble = opts.Results.scramble;
+
+%% Define prime bases and dimensions
+% If prime == 0, use first 'dimensions' primes implicitly
+if isequal(prime,0)
+    prime = primes(100); % Generate a pool of primes
+    prime = prime(1:dimensions); % Select first 'dimensions' primes
 end
-    if dimensions == 1 && (prnum==0 || prnum==2)
-        error('For dimension==1 a prime > 2 has to be supplied')
-    end
 
-%% Some warnings
+% Force row vector
+prime = prime(:)';
+
+% Validate prime vector
+if dimensions ~= numel(prime)
+    error('Dimensions do not match number of primes supplied');
+end
+if any(~isprime(prime))
+    error('Non-prime was supplied');
+end
+if dimensions == 1 && prime(1) <= 2
+    error('For dimension == 1, a prime > 2 must be supplied');
+end
+
+% Set Halton set dimensionality
+p = max(prime); % haltonset must cover all primes used
+
+%% Warnings
 if dimensions >= 7 && toscramble == 0
-    warning('With high dimensional Halton draws scrambling is recommended')
-end
-if (burn - max(prnum) <=10) || (size(prnum,2)==1 && dimensions>=13)
-    warning('The default burn setting might be too short for your primes')
+    warning(['Scrambling is recommended ' ...
+        'for high-dimensional Halton draws.']);
 end
 
-%% Halton sequences
+if (burn - max(prime) <= 10) || (isscalar(prime) && dimensions >= 13)
+    warning(['The default burn setting ' ...
+        'might be too short for your primes']);
+end
+
+%% Generate Halton sequences
 if leap == 0
-    h = haltonset(p,'Skip',burn+1); % sequence starts with zero; no leaps
+    h = haltonset(p,'Skip',burn+1); % Sequence starts at zero; skip burn
 else
     h = haltonset(p,'Skip',burn+1,'Leap',leap);
 end
- % Scramble
+
+% Scramble if requested
 if toscramble == 1
     h = scramble(h,'RR2');
 end
-hp = net(h,N*draws);
-    if prnum ~= 0
-        [~, primi] = ismember(prnum, primes(max(prnum)+1));
-        hp = hp(: , primi);
-    end
-    
-%% Randomization a la Bhat (see Train (2003, page 264))
+
+hp = net(h,N*draws); % Generate Halton points
+
+% Select dimensions based on supplied primes
+all_primes = primes(p+1);
+[~,primi] = ismember(prime,all_primes);
+if any(primi == 0)
+    error(['One or more supplied primes are not valid' ...
+        'or not found in the prime list.']);
+end
+hp = hp(:, primi); % Subset to requested dimensions
+
+%% Randomization with respect to Bhat (Train, 2003, p. 264)
 if randhalt == 1
     mu = rand(1,dimensions);
-        mu = repmat(mu,N*draws,1);
-    hp = hp + mu;
-        c = hp > 1;
-        hp = hp - c;
+    mu = repmat(mu,N*draws,1);
+    hp = hp+mu;
+    hp(hp>1) = hp(hp>1)-1; % Wrap values > 1 back into [0,1]
 end
 
-%% Reshaping
-H = reshape(hp,draws,N,dimensions); % NxRxJ 
-H = permute(H,[2,3,1]); % NxJxR
+%% Reshape output
+expected_cols = dimensions;
 
-%% Standard normal correspondence
+actual_cols = size(hp,2);
+
+if actual_cols ~= expected_cols
+    error(['Mismatch in Halton output dimensions: expected ' ...
+        '%d,got %d.'],expected_cols,actual_cols);
+end
+    
+H = reshape(hp',dimensions,draws,N); % dimensions x draws x N
+H = permute(H,[3,1,2]); % N x dimensions x draws
+
+%% Transform to standard normal
 if nargout >= 2
-    S = norminv(H);
+    Z = norminv(H); % Requires Statistics and Machine Learning Toolbox
 end
