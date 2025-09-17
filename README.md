@@ -28,3 +28,6 @@ References:
 See http://www.jyu.fi/ersa2003/cdrom/papers/406.pdf on correlations of Halton sequences for larger primes.
 Train, K. 2003. Discrete Choice Methods with Simulation. Cambridge: Cambridge University Press.
 ```
+
+# Exercise.pdf
+An accompanying exercise to illustrate the multidimensional draws
